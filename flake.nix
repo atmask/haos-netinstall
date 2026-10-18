@@ -9,7 +9,7 @@
   outputs = inputs@{ self, nixpkgs }:
   let
     system = "aarch64-linux";
-    pkgs = nixpkgs.legacyPackages.$(system);
+    pkgs = nixpkgs.legacyPackages.${system};
   in {
     packages.${system} = {
       kernel = pkgs.linuxPackages.kernel;
