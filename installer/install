@@ -12,3 +12,4 @@ export PATH=/bin
 
 echo "haos-netinstall: hello from PID $$"
 echo "cmdline: $(cat /proc/cmdline)"
+exec setsid cttyhack sh
