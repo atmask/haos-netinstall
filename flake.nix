@@ -15,7 +15,7 @@
       kernel = pkgs.linuxPackages.kernel;
 
       initramfs = pkgs.makeInitrdNG {
-        conmpressor = "zstd";
+        compressor = "zstd";
         contents = [
          { source = ./installer/install; target = "/init"; }
          { source = "${pkgs.pkgsStatic.busybox}/bin/busybox"; target = "/bin/busybox"; }
