@@ -18,7 +18,7 @@
         conmpressor = "zstd";
         contents = [
          { source = ./installer/install; target = "/init"; }
-         { source = "${pkgs.pkgsStatic.busybox}/bin/busybox"}; target = "/bin/busybox"; }
+         { source = "${pkgs.pkgsStatic.busybox}/bin/busybox"; target = "/bin/busybox"; }
         ];
       };
     };
