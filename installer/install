@@ -1,0 +1,14 @@
+#!/bin/busybox sh
+
+export PATH=/bin
+
+/bin/busybox mkdir -p /proc /sys /dev
+/bin/busybox mount -t proc proc /proc
+/bin/busybox mount -t sysfs sysfs /sys
+/bin/busybox mount -t devtmpfs devtmpfs /dev
+
+# symlink all busybox tools in path
+/bin/busybox --install -s /bin
+
+echo "haos-netinstall: hello from PID $$"
+echo "cmdline: $(cat /proc/cmdline)"
