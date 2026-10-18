@@ -2,7 +2,7 @@
   description = "Unofficial Network Installer ofr Home Assistant OS";
   
   inputs = {
-    nixpkgs = "github:NixOS/nixpkgs/nixos-26.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
 
   };
 
