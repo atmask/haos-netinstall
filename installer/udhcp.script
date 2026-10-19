@@ -1,0 +1,29 @@
+#!/bin/busybox sh
+
+
+# Called by udhcpc: $1 = event, lease details arrive as env vars.
+
+case "$1" in
+  deconfig)
+    ip addr flush dev "$interface"
+    ip link set "$interface" up
+    ;;
+  bound|renew)
+    ip addr flush dev "$interface"
+    ip addr add "$ip/$mask" dev "$interface"
+    
+    if [ -n "$router" ]; then
+      ip route del default 2>/dev/null
+      set -- $router 
+      ip route add default via "$!" dev "$interface"
+    fi
+
+    : > /etc/resolv.conf
+    [ -n "$domain" ] && echo "search $domain" >> /etc/resolv.conf
+    for ns in $dns; do echo "nameserver $ns" >> /etc/resolv.conf; done
+    ;;
+  leasefail|nak)
+    echo "udhcp: $1 on interface" >&2
+    ;;
+esac
+exit 0
