@@ -20,6 +20,8 @@
          { source = ./installer/init; target = "/init"; }
          { source = "${pkgs.pkgsStatic.busybox}/bin/busybox"; target = "/bin/busybox"; }
          { source = ./installer/udhcpc.script; target = "/usr/share/udhcpc/default.script"; }
+         { source = pkgs.lib.getExe pkgs.pkgsStatic.curl; target = "/bin/curl"; }
+         { source = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"; target = "/etc/ssl/certs/ca-certificates/crt"; }
         ];
       };
     };
