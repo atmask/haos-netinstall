@@ -15,7 +15,7 @@ mkdir -p /etc
 ip link set lo up
 ip link set eth0 up
 # TODO: Loop over nics in /sys/class/net/* (skip lo)
-udhcpc -i eth0 -q -t 5 -n || echo "haos-netinstall: DHCP failed"
+udhcpc -i eth0 -s /usr/share/udhcpc/default.script -q -t 5 -n || echo "haos-netinstall: DHCP failed"
 
 echo "haos-netinstall: hello from PID $$"
 echo "cmdline: $(cat /proc/cmdline)"
