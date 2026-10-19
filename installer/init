@@ -7,15 +7,15 @@ export PATH=/bin
 /bin/busybox mount -t sysfs sysfs /sys
 /bin/busybox mount -t devtmpfs devtmpfs /dev
 
+# symlink all busybox tools in path
+/bin/busybox --install -s /bin
 
+# Initialize nic
 mkdir -p /etc
 ip link set lo up
 ip link set eth0 up
 # TODO: Loop over nics in /sys/class/net/* (skip lo)
 udhcpc -i eth0 -q -t 5 -n || echo "haos-netinstall: DHCP failed"
-
-# symlink all busybox tools in path
-/bin/busybox --install -s /bin
 
 echo "haos-netinstall: hello from PID $$"
 echo "cmdline: $(cat /proc/cmdline)"
