@@ -6,7 +6,7 @@
 
   };
 
-  outputs = inputs@{ self, nixpkgs }:
+  outputs = inputs@{ self, nixpkgs, ... }:
   let
     system = "aarch64-linux";
     pkgs = nixpkgs.legacyPackages.${system};
