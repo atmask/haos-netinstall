@@ -31,9 +31,13 @@
       program = toString (pkgs.writeShellScript "haos-netinstall-vm" ''
         set -eu
         state=.vm #disk image lives here (add to .gitignore)
-
+        
+        # set up qcow2 disks
         mkdir -p "$state"
-        [ -e "$state/virtio.qcow2" ] || ${pkgs.qemu}/bin/qemu-img create -f qcow2 "$state/virtio.qcow2" 32G
+        for d in virtio nvme usb; do
+          [ -e "$state/$d.qcow2" ] || ${pkgs.qemu}/bin/qemu-img create -f qcow2 "$state/$d.qcow2" 32G
+        done
+
 
         exec ${pkgs.qemu}/bin/qemu-system-aarch64 \
           -M virt -cpu max -m 1G -nographic -no-reboot \
@@ -42,6 +46,11 @@
           -append "console=ttyAMA0 panic=-1 ''${KARGS:-}" \
           -nic user,model=virtio-net-pci \
           -drive file="$state/virtio.qcow2",if=virtio,format=qcow2 \
+          -drive file="$state/nvme.qcow2",if=none,id=nvm,format=qcow2 \
+          -device nvme,serial=haos-test,drive=nvm \
+          -device qemu-xhci \
+          -drive file="$state/usb.qcow2",if=none,id=usb,format=qcow2 \
+          -device usb-storage,drive=usb \
           "$@"
       '');
     };
