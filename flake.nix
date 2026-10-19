@@ -25,5 +25,25 @@
         ];
       };
     };
+
+    apps.${system}.vm = {
+      type = "app";
+      program = toString (pkgs.writeShellScript "haos-netinstall-vm" ''
+        set -eu
+        state=.vm #disk image lives here (add to .gitignore)
+
+        mkdir -p "$state"
+        [ -e "$state/virtio.qcow2" ] || ${pkgs.qemu}/bin/qemu-img create -f qcow2 "$state/virtio.qcow2" 32G
+
+        exec ${pkgs.qemu}/bin/qemu-system-aarch64 \
+          -M virt -cpu max -m 1G -nographic -no-reboot \
+          -kernel ${self.packages.${system}.kernel}/Image \
+          -initrd ${self.packages.${system}.initramfs}/initrd \
+          -append "console=ttyAMA0 panic=-1 ''${KARGS:-}" \
+          -nic user,model=virtio-net-pci \
+          -drive file="$state/virtio.qcow2",if=virtio,format=qcow2 \
+          "$@"
+      '');
+    };
   };
 }
