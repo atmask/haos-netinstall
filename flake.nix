@@ -19,6 +19,7 @@
         contents = [
          { source = ./installer/init; target = "/init"; }
          { source = "${pkgs.pkgsStatic.busybox}/bin/busybox"; target = "/bin/busybox"; }
+         { source = ./installer/udhcp.script; target = "/usr/share/udhcp/default.script"; }
         ];
       };
     };
