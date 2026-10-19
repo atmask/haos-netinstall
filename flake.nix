@@ -17,7 +17,7 @@
       initramfs = pkgs.makeInitrdNG {
         compressor = "zstd";
         contents = [
-         { source = ./installer/install; target = "/init"; }
+         { source = ./installer/init; target = "/init"; }
          { source = "${pkgs.pkgsStatic.busybox}/bin/busybox"; target = "/bin/busybox"; }
         ];
       };
