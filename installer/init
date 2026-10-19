@@ -21,6 +21,9 @@ udhcpc -i eth0 -s /usr/share/udhcpc/default.script -q -t 5 -n || echo "haos-neti
 export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
 export CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
 
+# TODO: Use DHCP reply ntp (udhcpc -O ntpsrv …) via $ntpsrv
+timeout 20 ntpd -q -n -p pool.ntp.org || echo "haos-netinstall: WARNING: time sync failed; HTTPS may fail"
+
 echo "haos-netinstall: hello from PID $$"
 echo "cmdline: $(cat /proc/cmdline)"
 exec setsid cttyhack sh
