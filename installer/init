@@ -26,6 +26,9 @@ export CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
 # TODO: Use DHCP reply ntp (udhcpc -O ntpsrv …) via $ntpsrv
 timeout 20 ntpd -q -n -p pool.ntp.org || echo "haos-netinstall: WARNING: time sync failed; HTTPS may fail"
 
+. /usr/lib/haos-netinstall/disks.sh
+list_disks
+
 echo "haos-netinstall: hello from PID $$"
 echo "cmdline: $(cat /proc/cmdline)"
 exec setsid cttyhack sh

@@ -27,6 +27,7 @@
          { source = ./installer/init; target = "/init"; }
          { source = "${pkgs.pkgsStatic.busybox}/bin/busybox"; target = "/bin/busybox"; }
          { source = ./installer/udhcpc.script; target = "/usr/share/udhcpc/default.script"; }
+         { source = ./installer/lib/disks.sh; target = "/usr/lib/haos-netinstall/disks.sh"; }
          { source = pkgs.lib.getExe pkgs.pkgsStatic.curl; target = "/bin/curl"; }
          { source = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"; target = "/etc/ssl/certs/ca-certificates.crt"; }
          { source = "${modules}/lib/modules"; target = "/lib/modules"; }
@@ -58,7 +59,7 @@
           -device nvme,serial=haos-test,drive=nvm \
           -device qemu-xhci \
           -drive file="$state/usb.qcow2",if=none,id=usb,format=qcow2 \
-          -device usb-storage,drive=usb \
+          -device usb-storage,drive=usb,removable=on \
           "$@"
       '');
     };
