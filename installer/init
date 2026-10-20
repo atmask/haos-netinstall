@@ -10,6 +10,8 @@ export PATH=/bin
 # symlink all busybox tools in path
 /bin/busybox --install -s /bin
 
+modprobe nvme || echo "haos-netinstall: failed to load nvme"
+
 # Initialize nic
 mkdir -p /etc
 ip link set lo up

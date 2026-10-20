@@ -19,7 +19,7 @@
     };
   in {
     packages.${system} = {
-      kernel = pkgs.linuxPackages.kernel;
+      kernel = kp.kernel;
 
       initramfs = pkgs.makeInitrdNG {
         compressor = "zstd";
@@ -29,6 +29,7 @@
          { source = ./installer/udhcpc.script; target = "/usr/share/udhcpc/default.script"; }
          { source = pkgs.lib.getExe pkgs.pkgsStatic.curl; target = "/bin/curl"; }
          { source = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"; target = "/etc/ssl/certs/ca-certificates.crt"; }
+         { source = "${modules}/lib/modules"; target = "/lib/modules"; }
         ];
       };
     };
