@@ -10,6 +10,13 @@
   let
     system = "aarch64-linux";
     pkgs = nixpkgs.legacyPackages.${system};
+    kp = pkgs.linuxPackages;
+    modules = pkgs.makeModulesClosure {
+      kernel = pkgs.lib.getOutput "modules" kp.kernel;
+      firmware = pkgs.linux-firmware;
+      rootModules = [ "nvme" ];
+      allowMissing = true;
+    };
   in {
     packages.${system} = {
       kernel = pkgs.linuxPackages.kernel;
