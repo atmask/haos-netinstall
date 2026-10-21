@@ -35,33 +35,54 @@
       };
     };
 
-    apps.${system}.vm = {
-      type = "app";
-      program = toString (pkgs.writeShellScript "haos-netinstall-vm" ''
-        set -eu
-        state=.vm #disk image lives here (add to .gitignore)
-        
-        # set up qcow2 disks
-        mkdir -p "$state"
-        for d in virtio nvme usb; do
-          [ -e "$state/$d.qcow2" ] || ${pkgs.qemu}/bin/qemu-img create -f qcow2 "$state/$d.qcow2" 32G
-        done
+    apps.${system} = {
+      vm = {
+        type = "app";
+        program = toString (pkgs.writeShellScript "haos-netinstall-vm" ''
+          set -eu
+          state=.vm #disk image lives here (add to .gitignore)
+          
+          # set up qcow2 disks
+          mkdir -p "$state"
+          for d in virtio nvme usb; do
+            [ -e "$state/$d.qcow2" ] || ${pkgs.qemu}/bin/qemu-img create -f qcow2 "$state/$d.qcow2" 10G
+          done
 
 
-        exec ${pkgs.qemu}/bin/qemu-system-aarch64 \
-          -M virt -cpu max -m 1G -nographic -no-reboot \
-          -kernel ${self.packages.${system}.kernel}/Image \
-          -initrd ${self.packages.${system}.initramfs}/initrd \
-          -append "console=ttyAMA0 panic=-1 ''${KARGS:-}" \
-          -nic user,model=virtio-net-pci \
-          -drive file="$state/virtio.qcow2",if=virtio,format=qcow2 \
-          -drive file="$state/nvme.qcow2",if=none,id=nvm,format=qcow2 \
-          -device nvme,serial=haos-test,drive=nvm \
-          -device qemu-xhci \
-          -drive file="$state/usb.qcow2",if=none,id=usb,format=qcow2 \
-          -device usb-storage,drive=usb,removable=on \
-          "$@"
-      '');
+          exec ${pkgs.qemu}/bin/qemu-system-aarch64 \
+            -M virt -cpu max -m 1G -nographic -no-reboot \
+            -kernel ${self.packages.${system}.kernel}/Image \
+            -initrd ${self.packages.${system}.initramfs}/initrd \
+            -append "console=ttyAMA0 panic=-1 ''${KARGS:-}" \
+            -nic user,model=virtio-net-pci \
+            -drive file="$state/virtio.qcow2",if=virtio,format=qcow2 \
+            -drive file="$state/nvme.qcow2",if=none,id=nvm,format=qcow2 \
+            -device nvme,serial=haos-test,drive=nvm \
+            -device qemu-xhci \
+            -drive file="$state/usb.qcow2",if=none,id=usb,format=qcow2 \
+            -device usb-storage,drive=usb,removable=on \
+            "$@"
+        '');
+      };
+
+      vm-disk = {
+        type = "app";
+        program = toString (pkgs.writeShellScript "haos-netinstall-vm" ''
+          set -eu
+          state=.vm #disk image lives here (add to .gitignore)
+          [ -e "$state/efivars.fd" ] || cp ${pkgs.qemu}/share/qemu/edk2-arm-vars.fd "$state/efivars.fd"
+          chmod u+w "$state/efivars.fd"
+
+          exec ${pkgs.qemu}/bin/qemu-system-aarch64 \
+            -M virt -cpu max -m 2G -nographic -no-reboot \
+            -drive if=pflash,format=raw,readonly=on,file=${pkgs.qemu}/share/qemu/edk2-aarch64-code.fd \
+            -drive if=pflash,format=raw,file="$state/efivars.fd" \
+            -nic user,model=virtio-net-pci,hostfwd=tcp::8123-:80 \
+            -drive file="$state/nvme.qcow2",if=none,id=nvm,format=qcow2 \
+            -device nvme,serial=haos-test,drive=nvm \
+            "$@" 
+            '');
+      };
     };
   };
 }

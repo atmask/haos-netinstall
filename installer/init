@@ -29,6 +29,7 @@ timeout 20 ntpd -q -n -p pool.ntp.org || echo "haos-netinstall: WARNING: time sy
 . /usr/lib/haos-netinstall/disks.sh
 list_disks
 
+
 echo "haos-netinstall: hello from PID $$"
 echo "cmdline: $(cat /proc/cmdline)"
 exec setsid cttyhack sh
