@@ -38,7 +38,7 @@
       };
 
       # The build folder to server
-      netbook = pkgs.linkFarm "haos-netinstall-netboot" [
+      netboot = pkgs.linkFarm "haos-netinstall-netboot" [
         { name = "haos.ipxe"; path = ./ipxe/haos.ipxe; }
         { name = "arm64/vmlinuz"; path = "${kp.kernel}/Image"; }
         { name = "arm64/initrd"; path = "${self.packages.${system}.initramfs}/initrd"; }
