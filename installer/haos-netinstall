@@ -1,28 +1,86 @@
 #!/bin/busybox sh
 
-# Goals
+# Install Home Assistant OS onto a local disk.
 #
-# 1) find and render disk options to the user to select target
+# 1) resolve image: board from uname -m → version from stable.json → URL (fail early if no network)
+# 2) list disks, user selects target
+# 3) warn if target already has HAOS; confirm by typing the disk name
+# 4) curl | xzcat | dd (bs=4M), with pipefail
+# 5) sync, re-read partitions, verify hassos-* partitions exist
 #
-# 2) fetch latest haos version and provider user with install options
-#
-# 4) build the url and then curl xzcat to dd onto the disk of 4m if not already installed
-#
-#
-#   # 1) resolve image: board from uname -m → version from stable.json → URL (fail early if no network)
-  # 2) list disks, user selects target
-  # 3) warn if target already has HAOS; confirm by typing the disk name
-  # 4) curl | xzcat | dd (bs=4M), with pipefail
-  # 5) sync, re-read partitions, verify hassos-* partitions exist
-  #
-  #
-URL=https://github.com/home-assistant/operating-system/releases/download/18.3/haos_generic-aarch-18.3.img.xz
+# Exits non-zero on any failure, so init can drop to a rescue shell.
 
-  ~ # curl -fsSIL $URL | head -1
+set -o pipefail  # a pipeline fails if ANY command in it fails (not just dd)
 
-   curl -fsSIL "$URL" | grep -E '^HTTP'
+. /usr/lib/haos-netinstall/disks.sh
 
+die() {
+  echo "haos-netinstall: $*" >&2
+  exit 1
+}
 
-   grep PARTNAME /sys/block/nvme0n1/nvme0n1p*/uevent
+# Sets $board, $version and $url for the current stable HAOS release.
+resolve_image_url() {
+  case "$(uname -m)" in
+    x86_64)  board=generic-x86-64 ;;
+    aarch64) board=generic-aarch64 ;;
+    *) die "unsupported architecture: $(uname -m)" ;;
+  esac
 
-    curl -fL $URL | xzcat | dd of=/dev/nvme0n1 bs=4M
+  # The board names also appear under "homeassistant", so look inside "hassos" only
+  version=$(curl -fsS https://version.home-assistant.io/stable.json | jq -r --arg b "$board" '.hassos[$b] // empty') \
+    || die "could not fetch https://version.home-assistant.io/stable.json"
+  [ -n "$version" ] || die "stable.json lists no HAOS version for $board"
+
+  url="https://github.com/home-assistant/operating-system/releases/download/$version/haos_$board-$version.img.xz"
+  curl -fsSIL "$url" > /dev/null || die "image not found: $url"
+}
+
+# Sets $disk to the name (e.g. nvme0n1) of the disk the user picks.
+choose_disk() {
+  [ -n "$(candidate_disks)" ] || die "no disks found"
+
+  list_disks
+  echo
+  while :; do
+    printf 'Install to which disk? (e.g. %s): ' "$(candidate_disks | head -n 1)"
+    read -r disk || die "no input on the console"
+    disk=${disk#/dev/}  # accept both "nvme0n1" and "/dev/nvme0n1"
+    candidate_disks | grep -qx "$disk" && return 0
+    echo "'$disk' is not one of the disks listed above."
+  done
+}
+
+confirm() {
+  echo
+  if disk_has_haos "$disk"; then
+    echo "WARNING: /dev/$disk already contains Home Assistant OS. Its data will be lost."
+  fi
+  echo "ALL DATA on /dev/$disk will be erased."
+  printf "Type '%s' to confirm: " "$disk"
+  read -r answer || die "no input on the console"
+  [ "$answer" = "$disk" ] || die "not confirmed; nothing was written"
+}
+
+write_image() {
+  echo
+  echo "Writing Home Assistant OS $version to /dev/$disk ..."
+  curl -fL --progress-bar "$url" | xzcat | dd of="/dev/$disk" bs=4M \
+    || die "writing the image failed; /dev/$disk is probably unusable now"
+  sync
+}
+
+verify_disk() {
+  blockdev --rereadpt "/dev/$disk" || die "could not re-read the partition table of /dev/$disk"
+  disk_has_haos "$disk" || die "no Home Assistant OS partitions found on /dev/$disk after writing"
+}
+
+resolve_image_url
+echo "Home Assistant OS $version ($board)"
+echo
+choose_disk
+confirm
+write_image
+verify_disk
+echo
+echo "Home Assistant OS $version installed on /dev/$disk."

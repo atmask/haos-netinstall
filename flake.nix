@@ -30,8 +30,10 @@
          { source = ./installer/init; target = "/init"; }
          { source = "${pkgs.pkgsStatic.busybox}/bin/busybox"; target = "/bin/busybox"; }
          { source = ./installer/udhcpc.script; target = "/usr/share/udhcpc/default.script"; }
+         { source = ./installer/haos-netinstall; target = "/usr/bin/haos-netinstall"; }
          { source = ./installer/lib/disks.sh; target = "/usr/lib/haos-netinstall/disks.sh"; }
          { source = pkgs.lib.getExe pkgs.pkgsStatic.curl; target = "/bin/curl"; }
+         { source = pkgs.lib.getExe pkgs.pkgsStatic.jq; target = "/bin/jq"; }
          { source = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"; target = "/etc/ssl/certs/ca-certificates.crt"; }
          { source = "${modules}/lib/modules"; target = "/lib/modules"; }
         ];

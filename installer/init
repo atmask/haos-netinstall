@@ -26,10 +26,15 @@ export CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
 # TODO: Use DHCP reply ntp (udhcpc -O ntpsrv …) via $ntpsrv
 timeout 20 ntpd -q -n -p pool.ntp.org || echo "haos-netinstall: WARNING: time sync failed; HTTPS may fail"
 
-. /usr/lib/haos-netinstall/disks.sh
-list_disks
+/usr/bin/haos-netinstall
+status=$?
 
+if [ "$status" -eq 0 ]; then
+  echo "haos-netinstall: done, rebooting into Home Assistant OS"
+  sleep 5
+  reboot -f
+fi
 
-echo "haos-netinstall: hello from PID $$"
-echo "cmdline: $(cat /proc/cmdline)"
+# PID 1 must never exit (the kernel panics), so drop to a shell instead
+echo "haos-netinstall: failed (exit $status). Dropping to a rescue shell."
 exec setsid cttyhack sh
