@@ -90,11 +90,39 @@
             -nic user,model=virtio-net-pci,hostfwd=tcp::8123-:80 \
             -drive file="$state/nvme.qcow2",if=none,id=nvm,format=qcow2 \
             -device nvme,serial=haos-test,drive=nvm \
-            "$@" 
+            "$@"
             '');
       };
 
+      vm-pxe = {
+        type = "app";
+        program = toString (pkgs.writeShellScript "haos-netinstall-vm-pxe" ''
+          set -eu
+          state=.vm #disk image lives here (add to .gitignore)
+          mkdir -p "$state"
+          [ -e "$state/nvme.qcow2" ] || ${pkgs.qemu}/bin/qemu-img create -f qcow2 "$state/nvme.qcow2" 10G
+          # separate firmware settings so boot entries don't mix with vm-disk
+          [ -e "$state/efivars-pxe.fd" ] || cp ${pkgs.qemu}/share/qemu/edk2-arm-vars.fd "$state/efivars-pxe.fd"
+          chmod u+w "$state/efivars-pxe.fd"
 
+          # serve the netboot folder on port 8000; reachable from the guest as 10.0.2.2
+          ${pkgs.busybox}/bin/busybox httpd -f -p 8000 -h ${self.packages.${system}.netboot} &
+          httpd=$!
+          trap 'kill $httpd' EXIT
+
+          # QEMU's DHCP points the firmware at ipxe.efi, served by its built-in TFTP.
+          # bootindex: try the network before the NVMe disk.
+          ${pkgs.qemu}/bin/qemu-system-aarch64 \
+            -M virt -cpu max -m 1G -nographic -no-reboot \
+            -drive if=pflash,format=raw,readonly=on,file=${pkgs.qemu}/share/qemu/edk2-aarch64-code.fd \
+            -drive if=pflash,format=raw,file="$state/efivars-pxe.fd" \
+            -netdev user,id=net0,tftp=${ipxeTest},bootfile=ipxe.efi \
+            -device virtio-net-pci,netdev=net0,bootindex=0 \
+            -drive file="$state/nvme.qcow2",if=none,id=nvm,format=qcow2 \
+            -device nvme,serial=haos-test,drive=nvm,bootindex=1 \
+            "$@"
+        '');
+      };
     };
   };
 }
