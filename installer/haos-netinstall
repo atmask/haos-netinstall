@@ -1,0 +1,28 @@
+#!/bin/busybox sh
+
+# Goals
+#
+# 1) find and render disk options to the user to select target
+#
+# 2) fetch latest haos version and provider user with install options
+#
+# 4) build the url and then curl xzcat to dd onto the disk of 4m if not already installed
+#
+#
+#   # 1) resolve image: board from uname -m → version from stable.json → URL (fail early if no network)
+  # 2) list disks, user selects target
+  # 3) warn if target already has HAOS; confirm by typing the disk name
+  # 4) curl | xzcat | dd (bs=4M), with pipefail
+  # 5) sync, re-read partitions, verify hassos-* partitions exist
+  #
+  #
+URL=https://github.com/home-assistant/operating-system/releases/download/18.3/haos_generic-aarch-18.3.img.xz
+
+  ~ # curl -fsSIL $URL | head -1
+
+   curl -fsSIL "$URL" | grep -E '^HTTP'
+
+
+   grep PARTNAME /sys/block/nvme0n1/nvme0n1p*/uevent
+
+    curl -fL $URL | xzcat | dd of=/dev/nvme0n1 bs=4M
