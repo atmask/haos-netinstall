@@ -4,4 +4,4 @@ dhcp
 # Ignore the ipxe.efi offered by dhcp to break boot loop
 echo DHCP offered: ${filename}
 
-chain https://10.0.2.2:8000/haos.ipxe
+chain http://10.0.2.2:8000/haos.ipxe
