@@ -1,0 +1,4 @@
+#!ipxe
+kernel ${buildarch}/vmlinuz console=ttyAMA0 panic=-1 ${haos_args}
+initrd ${buildarch}/initrd
+boot

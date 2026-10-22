@@ -17,6 +17,9 @@
       rootModules = [ "nvme" ];
       allowMissing = true;
     };
+    # QEMU DHCP will point to ipxe.efi here.
+    # emebed into the ipxe efi out custom script to hit dhcp again for ipxe client config and then get haos-netinstall ipxe script
+    ipxeTest = pkgs.ipxe.override { embedScript = ./ipxe/embed.ipxe; };
   in {
     packages.${system} = {
       kernel = kp.kernel;
@@ -33,6 +36,13 @@
          { source = "${modules}/lib/modules"; target = "/lib/modules"; }
         ];
       };
+
+      # The build folder to server
+      netbook = pkgs.linkFarm "haos-netinstall-netboot" [
+        { name = "haos.ipxe"; path = ./ipxe/haos.ipxe; }
+        { name = "arm64/vmlinuz"; path = "${kp.kernel}/Image"; }
+        { name = "arm64/initrd"; path = "${self.packages.${system}.initramfs}/initrd"; }
+      ];
     };
 
     apps.${system} = {
@@ -83,6 +93,8 @@
             "$@" 
             '');
       };
+
+
     };
   };
 }
