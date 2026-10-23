@@ -34,7 +34,9 @@
          { source = ./installer/lib/disks.sh; target = "/usr/lib/haos-netinstall/disks.sh"; }
          { source = pkgs.lib.getExe pkgs.pkgsStatic.curl; target = "/bin/curl"; }
          { source = pkgs.lib.getExe pkgs.pkgsStatic.jq; target = "/bin/jq"; }
-         { source = pkgs.lib.getExe pkgs.pkgsStatic.efibootmgr; target = "/bin/efibootmgr"; }
+         # Not pkgsStatic: efivar's build always links a shared libefiboot.so, which fails with static musl.
+         # A dynamic binary is fine, makeInitrdNG copies the libraries it needs into the initramfs.
+         { source = pkgs.lib.getExe pkgs.efibootmgr; target = "/bin/efibootmgr"; }
          { source = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"; target = "/etc/ssl/certs/ca-certificates.crt"; }
          { source = "${modules}/lib/modules"; target = "/lib/modules"; }
         ];
