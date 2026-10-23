@@ -11,8 +11,8 @@ export PATH=/bin
 /bin/busybox --install -s /bin
 
 # Drivers that are modules in the nixpkgs kernel. On x86 even virtio (the QEMU NIC and disk) is a module;
-# on aarch64 virtio is built in, so modprobe fails for it, harmlessly.
-for m in nvme virtio_pci virtio_net virtio_blk; do
+# on aarch64 virtio is built in, so modprobe fails for it, harmlessly. af_packet is what udhcpc needs to send DHCP.
+for m in nvme virtio_pci virtio_net virtio_blk af_packet; do
   modprobe "$m" 2>/dev/null
 done
 

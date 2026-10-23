@@ -41,7 +41,7 @@
         kernel = pkgs.lib.getOutput "modules" kp.kernel;
         firmware = pkgs.linux-firmware;
         # Built into the kernel on some targets (e.g. virtio on aarch64); allowMissing skips those
-        rootModules = [ "nvme" "efivarfs" "virtio_pci" "virtio_net" "virtio_blk" ];
+        rootModules = [ "nvme" "efivarfs" "virtio_pci" "virtio_net" "virtio_blk" "af_packet" ];
         allowMissing = true;
       };
 
