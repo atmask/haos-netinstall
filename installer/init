@@ -10,7 +10,11 @@ export PATH=/bin
 # symlink all busybox tools in path
 /bin/busybox --install -s /bin
 
-modprobe nvme || echo "haos-netinstall: failed to load nvme"
+# Drivers that are modules in the nixpkgs kernel. On x86 even virtio (the QEMU NIC and disk) is a module;
+# on aarch64 virtio is built in, so modprobe fails for it, harmlessly.
+for m in nvme virtio_pci virtio_net virtio_blk; do
+  modprobe "$m" 2>/dev/null
+done
 
 # UEFI boot entries (Boot0001, BootOrder, ...) show up as files here; only exists on UEFI machines
 if [ -d /sys/firmware/efi ]; then

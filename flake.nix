@@ -1,6 +1,6 @@
 {
   description = "Unofficial Network Installer ofr Home Assistant OS";
-  
+
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
 
@@ -8,21 +8,42 @@
 
   outputs = inputs@{ self, nixpkgs, ... }:
   let
-    system = "aarch64-linux";
-    pkgs = nixpkgs.legacyPackages.${system};
-    kp = pkgs.linuxPackages;
-    modules = pkgs.makeModulesClosure {
-      kernel = pkgs.lib.getOutput "modules" kp.kernel;
-      firmware = pkgs.linux-firmware;
-      rootModules = [ "nvme" "efivarfs" ];
-      allowMissing = true;
+    lib = nixpkgs.lib;
+
+    # Each system is both a target (the machine HAOS gets installed on) and a host (where the test VMs run)
+    systems = [ "aarch64-linux" "x86_64-linux" ];
+    forAllSystems = lib.genAttrs systems;
+
+    # What differs between targets
+    targets = {
+      aarch64-linux = {
+        arch = "arm64";  # the folder name; matches iPXE's ${buildarch}
+        qemu = "qemu-system-aarch64 -M virt -cpu max";
+        console = "ttyAMA0";
+        firmware = "edk2-aarch64-code.fd";
+        vars = "edk2-arm-vars.fd";
+      };
+      x86_64-linux = {
+        arch = "x86_64";
+        qemu = "qemu-system-x86_64 -M q35 -cpu max";
+        console = "ttyS0";
+        firmware = "edk2-x86_64-code.fd";
+        vars = "edk2-i386-vars.fd";
+      };
     };
-    # QEMU DHCP will point to ipxe.efi here.
-    # emebed into the ipxe efi out custom script to hit dhcp again for ipxe client config and then get haos-netinstall ipxe script
-    ipxeTest = pkgs.ipxe.override { embedScript = ./ipxe/embed.ipxe; };
-  in {
-    packages.${system} = {
-      kernel = kp.kernel;
+
+    # The installer, built for one target
+    mkPackages = system:
+    let
+      pkgs = nixpkgs.legacyPackages.${system};
+      kp = pkgs.linuxPackages;
+      modules = pkgs.makeModulesClosure {
+        kernel = pkgs.lib.getOutput "modules" kp.kernel;
+        firmware = pkgs.linux-firmware;
+        # Built into the kernel on some targets (e.g. virtio on aarch64); allowMissing skips those
+        rootModules = [ "nvme" "efivarfs" "virtio_pci" "virtio_net" "virtio_blk" ];
+        allowMissing = true;
+      };
 
       initramfs = pkgs.makeInitrdNG {
         compressor = "zstd";
@@ -42,33 +63,52 @@
         ];
       };
 
+      arch = targets.${system}.arch;
+    in {
+      kernel = kp.kernel;
+      inherit initramfs;
+
       # The build folder to server
-      netboot = pkgs.linkFarm "haos-netinstall-netboot" [
+      netboot = pkgs.linkFarm "haos-netinstall-netboot-${arch}" [
         { name = "haos.ipxe"; path = ./ipxe/haos.ipxe; }
-        { name = "arm64/vmlinuz"; path = "${kp.kernel}/Image"; }
-        { name = "arm64/initrd"; path = "${self.packages.${system}.initramfs}/initrd"; }
+        # The kernel file is "Image" on aarch64 and "bzImage" on x86_64
+        { name = "${arch}/vmlinuz"; path = "${kp.kernel}/${pkgs.stdenv.hostPlatform.linux-kernel.target}"; }
+        { name = "${arch}/initrd"; path = "${initramfs}/initrd"; }
       ];
+
+      # QEMU DHCP will point to ipxe.efi here.
+      # emebed into the ipxe efi out custom script to hit dhcp again for ipxe client config and then get haos-netinstall ipxe script
+      ipxe-test = pkgs.ipxe.override { embedScript = ./ipxe/embed.ipxe; };
     };
 
-    apps.${system} = {
-      vm = {
-        type = "app";
-        program = toString (pkgs.writeShellScript "haos-netinstall-vm" ''
+    # Test VMs that run on `host`. A VM's target can be another arch, QEMU then emulates it (slowly).
+    mkApps = host:
+    let
+      pkgs = nixpkgs.legacyPackages.${host};
+      qemu = pkgs.qemu;
+      app = name: script: { type = "app"; program = toString (pkgs.writeShellScript name script); };
+
+      vmsFor = system:
+      let
+        t = targets.${system};
+        p = self.packages.${system};
+        state = ".vm/${system}";  # disk images and firmware settings live here (in .gitignore)
+      in {
+        # Boot the installer directly with -kernel, skipping firmware and the network boot
+        vm = app "haos-netinstall-vm" ''
           set -eu
-          state=.vm #disk image lives here (add to .gitignore)
-          
+          state=${state}
+
           # set up qcow2 disks
           mkdir -p "$state"
           for d in virtio nvme usb; do
-            [ -e "$state/$d.qcow2" ] || ${pkgs.qemu}/bin/qemu-img create -f qcow2 "$state/$d.qcow2" 10G
+            [ -e "$state/$d.qcow2" ] || ${qemu}/bin/qemu-img create -f qcow2 "$state/$d.qcow2" 10G
           done
 
-
-          exec ${pkgs.qemu}/bin/qemu-system-aarch64 \
-            -M virt -cpu max -m 1G -nographic -no-reboot \
-            -kernel ${self.packages.${system}.kernel}/Image \
-            -initrd ${self.packages.${system}.initramfs}/initrd \
-            -append "console=ttyAMA0 panic=-1 ''${KARGS:-}" \
+          exec ${qemu}/bin/${t.qemu} -m 1G -nographic -no-reboot \
+            -kernel ${p.netboot}/${t.arch}/vmlinuz \
+            -initrd ${p.netboot}/${t.arch}/initrd \
+            -append "console=${t.console} panic=-1 ''${KARGS:-}" \
             -nic user,model=virtio-net-pci \
             -drive file="$state/virtio.qcow2",if=virtio,format=qcow2 \
             -drive file="$state/nvme.qcow2",if=none,id=nvm,format=qcow2 \
@@ -77,58 +117,63 @@
             -drive file="$state/usb.qcow2",if=none,id=usb,format=qcow2 \
             -device usb-storage,drive=usb,removable=on \
             "$@"
-        '');
-      };
+        '';
 
-      vm-disk = {
-        type = "app";
-        program = toString (pkgs.writeShellScript "haos-netinstall-vm" ''
+        # Boot whatever is installed on the NVMe disk, with the HA UI forwarded to host port 8123
+        vm-disk = app "haos-netinstall-vm-disk" ''
           set -eu
-          state=.vm #disk image lives here (add to .gitignore)
-          [ -e "$state/efivars.fd" ] || cp ${pkgs.qemu}/share/qemu/edk2-arm-vars.fd "$state/efivars.fd"
+          state=${state}
+          mkdir -p "$state"
+          [ -e "$state/efivars.fd" ] || cp ${qemu}/share/qemu/${t.vars} "$state/efivars.fd"
           chmod u+w "$state/efivars.fd"
 
-          exec ${pkgs.qemu}/bin/qemu-system-aarch64 \
-            -M virt -cpu max -m 2G -nographic -no-reboot \
-            -drive if=pflash,format=raw,readonly=on,file=${pkgs.qemu}/share/qemu/edk2-aarch64-code.fd \
+          exec ${qemu}/bin/${t.qemu} -m 2G -nographic -no-reboot \
+            -drive if=pflash,format=raw,readonly=on,file=${qemu}/share/qemu/${t.firmware} \
             -drive if=pflash,format=raw,file="$state/efivars.fd" \
             -nic user,model=virtio-net-pci,hostfwd=tcp::8123-:80 \
             -drive file="$state/nvme.qcow2",if=none,id=nvm,format=qcow2 \
             -device nvme,serial=haos-test,drive=nvm \
             "$@"
-            '');
-      };
+        '';
 
-      vm-pxe = {
-        type = "app";
-        program = toString (pkgs.writeShellScript "haos-netinstall-vm-pxe" ''
+        # The real flow: UEFI firmware -> PXE -> iPXE -> haos.ipxe over HTTP -> installer
+        vm-pxe = app "haos-netinstall-vm-pxe" ''
           set -eu
-          state=.vm #disk image lives here (add to .gitignore)
+          state=${state}
           mkdir -p "$state"
-          [ -e "$state/nvme.qcow2" ] || ${pkgs.qemu}/bin/qemu-img create -f qcow2 "$state/nvme.qcow2" 10G
+          [ -e "$state/nvme.qcow2" ] || ${qemu}/bin/qemu-img create -f qcow2 "$state/nvme.qcow2" 10G
           # separate firmware settings so boot entries don't mix with vm-disk
-          [ -e "$state/efivars-pxe.fd" ] || cp ${pkgs.qemu}/share/qemu/edk2-arm-vars.fd "$state/efivars-pxe.fd"
+          [ -e "$state/efivars-pxe.fd" ] || cp ${qemu}/share/qemu/${t.vars} "$state/efivars-pxe.fd"
           chmod u+w "$state/efivars-pxe.fd"
 
           # serve the netboot folder on port 8000; reachable from the guest as 10.0.2.2
-          ${pkgs.busybox}/bin/busybox httpd -f -p 8000 -h ${self.packages.${system}.netboot} &
+          ${pkgs.busybox}/bin/busybox httpd -f -p 8000 -h ${p.netboot} &
           httpd=$!
           trap 'kill $httpd' EXIT
 
           # QEMU's DHCP points the firmware at ipxe.efi, served by its built-in TFTP.
           # No bootindex: with it, edk2 re-sorts BootOrder to QEMU's order on every boot, undoing
           # the installer's boot entry. Without it, the saved BootOrder is used, like a real PC.
-          ${pkgs.qemu}/bin/qemu-system-aarch64 \
-            -M virt -cpu max -m 1G -nographic -no-reboot \
-            -drive if=pflash,format=raw,readonly=on,file=${pkgs.qemu}/share/qemu/edk2-aarch64-code.fd \
+          ${qemu}/bin/${t.qemu} -m 1G -nographic -no-reboot \
+            -drive if=pflash,format=raw,readonly=on,file=${qemu}/share/qemu/${t.firmware} \
             -drive if=pflash,format=raw,file="$state/efivars-pxe.fd" \
-            -netdev user,id=net0,tftp=${ipxeTest},bootfile=ipxe.efi \
+            -netdev user,id=net0,tftp=${p.ipxe-test},bootfile=ipxe.efi \
             -device virtio-net-pci,netdev=net0 \
             -drive file="$state/nvme.qcow2",if=none,id=nvm,format=qcow2 \
             -device nvme,serial=haos-test,drive=nvm \
             "$@"
-        '');
+        '';
       };
-    };
+
+      # vm-pxe -> vm-pxe-x86_64, for running a specific target
+      suffixed = system: lib.mapAttrs'
+        (name: value: lib.nameValuePair "${name}-${lib.removeSuffix "-linux" system}" value)
+        (vmsFor system);
+    in
+      # Plain vm, vm-disk, vm-pxe run the host's own arch; the suffixed ones pick a target
+      vmsFor host // suffixed "aarch64-linux" // suffixed "x86_64-linux";
+  in {
+    packages = forAllSystems mkPackages;
+    apps = forAllSystems mkApps;
   };
 }

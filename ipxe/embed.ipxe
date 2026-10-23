@@ -4,4 +4,8 @@ dhcp
 # Ignore the ipxe.efi offered by dhcp to break boot loop
 echo DHCP offered: ${filename}
 
+# QEMU -nographic only shows the serial port, so make it the installer's console
+# (on x86, haos.ipxe would otherwise put the prompts on the invisible screen)
+iseq ${buildarch} arm64 && set console console=ttyAMA0 || set console console=tty0 console=ttyS0
+
 chain http://10.0.2.2:8000/haos.ipxe

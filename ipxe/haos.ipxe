@@ -1,4 +1,14 @@
 #!ipxe
-kernel ${buildarch}/vmlinuz console=ttyAMA0 panic=-1 ${haos_args}
+
+# Where the kernel and installer print. The LAST console= is where the installer's prompts appear:
+# the serial port on arm64 boards, the screen on x86 PCs (serial too, for kernel messages).
+# A script that chains to this one can set ${console} first to override it.
+isset ${console} && goto boot || goto default_console
+
+:default_console
+iseq ${buildarch} arm64 && set console console=ttyAMA0 || set console console=ttyS0 console=tty0
+
+:boot
+kernel ${buildarch}/vmlinuz ${console} panic=-1 ${haos_args}
 initrd ${buildarch}/initrd
 boot
