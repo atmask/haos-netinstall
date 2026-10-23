@@ -14,7 +14,7 @@
     modules = pkgs.makeModulesClosure {
       kernel = pkgs.lib.getOutput "modules" kp.kernel;
       firmware = pkgs.linux-firmware;
-      rootModules = [ "nvme" ];
+      rootModules = [ "nvme" "efivarfs" ];
       allowMissing = true;
     };
     # QEMU DHCP will point to ipxe.efi here.
@@ -34,6 +34,7 @@
          { source = ./installer/lib/disks.sh; target = "/usr/lib/haos-netinstall/disks.sh"; }
          { source = pkgs.lib.getExe pkgs.pkgsStatic.curl; target = "/bin/curl"; }
          { source = pkgs.lib.getExe pkgs.pkgsStatic.jq; target = "/bin/jq"; }
+         { source = pkgs.lib.getExe pkgs.pkgsStatic.efibootmgr; target = "/bin/efibootmgr"; }
          { source = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"; target = "/etc/ssl/certs/ca-certificates.crt"; }
          { source = "${modules}/lib/modules"; target = "/lib/modules"; }
         ];

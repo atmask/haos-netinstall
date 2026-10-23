@@ -12,6 +12,12 @@ export PATH=/bin
 
 modprobe nvme || echo "haos-netinstall: failed to load nvme"
 
+# UEFI boot entries (Boot0001, BootOrder, ...) show up as files here; only exists on UEFI machines
+if [ -d /sys/firmware/efi ]; then
+  modprobe efivarfs 2>/dev/null  # may be built into the kernel instead, which is fine
+  mount -t efivarfs efivarfs /sys/firmware/efi/efivars || echo "haos-netinstall: failed to mount efivarfs"
+fi
+
 # Initialize nic
 mkdir -p /etc
 ip link set lo up

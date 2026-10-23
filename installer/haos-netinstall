@@ -7,6 +7,7 @@
 # 3) warn if target already has HAOS; confirm by typing the disk name
 # 4) curl | xzcat | dd (bs=4M), with pipefail
 # 5) sync, re-read partitions, verify hassos-* partitions exist
+# 6) UEFI only: add a boot entry for the disk and put it first, so the reboot skips the network
 #
 # Exits non-zero on any failure, so init can drop to a rescue shell.
 
@@ -19,11 +20,12 @@ die() {
   exit 1
 }
 
-# Sets $board, $version and $url for the current stable HAOS release.
+# Sets $board, $version and $url for the current stable HAOS release,
+# and $efi_loader, the file UEFI firmware starts from the HAOS boot partition.
 resolve_image_url() {
   case "$(uname -m)" in
-    x86_64)  board=generic-x86-64 ;;
-    aarch64) board=generic-aarch64 ;;
+    x86_64)  board=generic-x86-64;  efi_loader='\EFI\BOOT\BOOTX64.EFI' ;;
+    aarch64) board=generic-aarch64; efi_loader='\EFI\BOOT\BOOTAA64.EFI' ;;
     *) die "unsupported architecture: $(uname -m)" ;;
   esac
 
@@ -75,6 +77,26 @@ verify_disk() {
   disk_has_haos "$disk" || die "no Home Assistant OS partitions found on /dev/$disk after writing"
 }
 
+# Add a UEFI boot entry for HAOS and put it first in BootOrder.
+# Not fatal: HAOS is already on the disk, the user can still change the boot order by hand.
+add_boot_entry() {
+  if [ ! -d /sys/firmware/efi ]; then
+    echo "Not a UEFI machine: set the boot order in your BIOS so /dev/$disk comes before the network."
+    return 0
+  fi
+
+  # Remove entries left by an earlier install, so reinstalling doesn't pile up duplicates.
+  # efibootmgr prints lines like: Boot0003* Home Assistant OS	HD(1,GPT,...)
+  for num in $(efibootmgr | sed -n 's/^Boot\([0-9A-F]\{4\}\)\*\{0,1\} Home Assistant OS.*/\1/p'); do
+    efibootmgr --quiet --bootnum "$num" --delete-bootnum
+  done
+
+  # --create also puts the new entry first in BootOrder. Partition 1 is hassos-boot.
+  efibootmgr --quiet --create --disk "/dev/$disk" --part 1 \
+    --label "Home Assistant OS" --loader "$efi_loader" \
+    || echo "WARNING: could not add a UEFI boot entry; set the boot order in your firmware so /dev/$disk comes first."
+}
+
 resolve_image_url
 echo "Home Assistant OS $version ($board)"
 echo
@@ -82,5 +104,6 @@ choose_disk
 confirm
 write_image
 verify_disk
+add_boot_entry
 echo
 echo "Home Assistant OS $version installed on /dev/$disk."
