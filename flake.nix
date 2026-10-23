@@ -116,15 +116,16 @@
           trap 'kill $httpd' EXIT
 
           # QEMU's DHCP points the firmware at ipxe.efi, served by its built-in TFTP.
-          # bootindex: try the network before the NVMe disk.
+          # No bootindex: with it, edk2 re-sorts BootOrder to QEMU's order on every boot, undoing
+          # the installer's boot entry. Without it, the saved BootOrder is used, like a real PC.
           ${pkgs.qemu}/bin/qemu-system-aarch64 \
             -M virt -cpu max -m 1G -nographic -no-reboot \
             -drive if=pflash,format=raw,readonly=on,file=${pkgs.qemu}/share/qemu/edk2-aarch64-code.fd \
             -drive if=pflash,format=raw,file="$state/efivars-pxe.fd" \
             -netdev user,id=net0,tftp=${ipxeTest},bootfile=ipxe.efi \
-            -device virtio-net-pci,netdev=net0,bootindex=0 \
+            -device virtio-net-pci,netdev=net0 \
             -drive file="$state/nvme.qcow2",if=none,id=nvm,format=qcow2 \
-            -device nvme,serial=haos-test,drive=nvm,bootindex=1 \
+            -device nvme,serial=haos-test,drive=nvm \
             "$@"
         '');
       };
