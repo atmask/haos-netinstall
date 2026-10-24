@@ -154,7 +154,8 @@
           # QEMU's DHCP points the firmware at ipxe.efi, served by its built-in TFTP.
           # No bootindex: with it, edk2 re-sorts BootOrder to QEMU's order on every boot, undoing
           # the installer's boot entry. Without it, the saved BootOrder is used, like a real PC.
-          ${qemu}/bin/${t.qemu} -m 1G -nographic -no-reboot \
+          # 2G: the second run boots the installed HAOS, which needs at least 2G
+          ${qemu}/bin/${t.qemu} -m 2G -nographic -no-reboot \
             -drive if=pflash,format=raw,readonly=on,file=${qemu}/share/qemu/${t.firmware} \
             -drive if=pflash,format=raw,file="$state/efivars-pxe.fd" \
             -netdev user,id=net0,tftp=${p.ipxe-test},bootfile=ipxe.efi \
