@@ -10,11 +10,19 @@ export PATH=/bin
 # symlink all busybox tools in path
 /bin/busybox --install -s /bin
 
-# Drivers that are modules in the nixpkgs kernel. On x86 even virtio (the QEMU NIC and disk) is a module;
-# on aarch64 virtio is built in, so modprobe fails for it, harmlessly. af_packet is what udhcpc needs to send DHCP.
-for m in nvme virtio_pci virtio_net virtio_blk af_packet; do
-  modprobe "$m" 2>/dev/null
-done
+# Load the drivers for the hardware in this machine. Every device the kernel finds has a modalias file
+# in /sys (e.g. pci:v00008086d000010D3...); modprobe matches it against modules.alias to find the driver.
+# Some drivers reveal more devices (the USB controller, then the USB disk and keyboard behind it;
+# virtio_pci, then the virtio disk and network card), so repeat a few times.
+load_drivers() {
+  for pass in 1 2 3; do
+    find /sys/devices -name modalias -exec cat {} + 2>/dev/null | sort -u | xargs modprobe -a -q 2>/dev/null
+    sleep 1
+  done
+}
+load_drivers
+# udhcpc needs raw packet sockets to send DHCP. No device asks for this one, so load it by name.
+modprobe af_packet 2>/dev/null  # built into the kernel on some targets, which is fine
 
 # UEFI boot entries (Boot0001, BootOrder, ...) show up as files here; only exists on UEFI machines
 if [ -d /sys/firmware/efi ]; then
@@ -25,9 +33,44 @@ fi
 # Initialize nic
 mkdir -p /etc
 ip link set lo up
-ip link set eth0 up
-# TODO: Loop over nics in /sys/class/net/* (skip lo)
-udhcpc -i eth0 -s /usr/share/udhcpc/default.script -q -t 5 -n || echo "haos-netinstall: DHCP failed"
+
+# Print the network interfaces (eth0, enp3s0, ...), skipping loopback
+interfaces() {
+  for dev in /sys/class/net/*; do
+    [ "${dev##*/}" = lo ] || echo "${dev##*/}"
+  done
+}
+
+# Succeed if a cable is plugged into the interface (carrier is only readable while it's up)
+has_carrier() {
+  [ "$(cat "/sys/class/net/$1/carrier" 2>/dev/null)" = 1 ]
+}
+
+for iface in $(interfaces); do
+  ip link set "$iface" up
+done
+
+# A real network card takes a few seconds to notice the cable after coming up; wait up to 10s for one to
+wait=0
+while [ "$wait" -lt 10 ]; do
+  for iface in $(interfaces); do
+    has_carrier "$iface" && break 2
+  done
+  sleep 1
+  wait=$((wait + 1))
+done
+
+# DHCP on the first interface with a cable that gets an answer. The script configures the address,
+# route and DNS.
+net=
+for iface in $(interfaces); do
+  has_carrier "$iface" || continue
+  if udhcpc -i "$iface" -s /usr/share/udhcpc/default.script -q -t 5 -n; then
+    net=$iface
+    break
+  fi
+done
+[ -n "$net" ] || echo "haos-netinstall: DHCP failed (interfaces: $(interfaces | tr '\n' ' '))"
 
 # Configure TLS bundle
 export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt

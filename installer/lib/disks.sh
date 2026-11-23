@@ -4,7 +4,8 @@ candidate_disks() {
   for dev in /sys/block/*; do
     name=${dev##*/}
     case "$name" in
-      loop*|ram*|mtdblock*|zram*|sr*) continue ;;
+      # mmcblk0boot0/1 and mmcblk0rpmb are small hidden areas of an eMMC chip, not separate disks
+      loop*|ram*|mtdblock*|zram*|sr*|mmcblk*boot*|mmcblk*rpmb) continue ;;
     esac
     echo "$name"
   done

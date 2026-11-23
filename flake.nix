@@ -1,5 +1,5 @@
 {
-  description = "Unofficial Network Installer ofr Home Assistant OS";
+  description = "Unofficial network installer for Home Assistant OS";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
@@ -40,8 +40,19 @@
       modules = pkgs.makeModulesClosure {
         kernel = pkgs.lib.getOutput "modules" kp.kernel;
         firmware = pkgs.linux-firmware;
+        # The drivers that go in the initramfs; init loads the ones matching the hardware it finds.
         # Built into the kernel on some targets (e.g. virtio on aarch64); allowMissing skips those
-        rootModules = [ "nvme" "efivarfs" "virtio_pci" "virtio_net" "virtio_blk" "af_packet" ];
+        rootModules = [
+          "efivarfs" "af_packet"
+          # VMs (QEMU, Proxmox)
+          "virtio_pci" "virtio_net" "virtio_blk" "virtio_scsi"
+          # Disks: NVMe, SATA, USB, SD/eMMC
+          "nvme" "ahci" "ata_piix" "sd_mod" "usb_storage" "uas" "mmc_block" "sdhci_pci" "sdhci_acpi"
+          # USB controllers and keyboards (to answer the installer's prompts)
+          "xhci_pci" "ehci_pci" "usbhid" "hid_generic"
+          # Wired network cards: Intel, Realtek, Broadcom, and common USB adapters
+          "e1000" "e1000e" "igb" "igc" "r8169" "tg3" "r8152" "cdc_ether" "ax88179_178a"
+        ];
         allowMissing = true;
       };
 
@@ -93,6 +104,34 @@
         t = targets.${system};
         p = self.packages.${system};
         state = ".vm/${system}";  # disk images and firmware settings live here (in .gitignore)
+
+        # The real flow: UEFI firmware -> PXE -> iPXE -> haos.ipxe over HTTP -> installer.
+        # `disk` names the disk image and firmware settings, so each variant keeps its own.
+        pxeVm = name: disk: devices: app name ''
+          set -eu
+          state=${state}
+          mkdir -p "$state"
+          [ -e "$state/${disk}.qcow2" ] || ${qemu}/bin/qemu-img create -f qcow2 "$state/${disk}.qcow2" 10G
+          # separate firmware settings so boot entries don't mix with vm-disk
+          [ -e "$state/efivars-pxe-${disk}.fd" ] || cp ${qemu}/share/qemu/${t.vars} "$state/efivars-pxe-${disk}.fd"
+          chmod u+w "$state/efivars-pxe-${disk}.fd"
+
+          # serve the netboot folder on port 8000; reachable from the guest as 10.0.2.2
+          ${pkgs.busybox}/bin/busybox httpd -f -p 8000 -h ${p.netboot} &
+          httpd=$!
+          trap 'kill $httpd' EXIT
+
+          # QEMU's DHCP points the firmware at ipxe.efi, served by its built-in TFTP.
+          # No bootindex: with it, edk2 re-sorts BootOrder to QEMU's order on every boot, undoing
+          # the installer's boot entry. Without it, the saved BootOrder is used, like a real PC.
+          # 2G: the second run boots the installed HAOS, which needs at least 2G
+          ${qemu}/bin/${t.qemu} -m 2G -nographic -no-reboot \
+            -drive if=pflash,format=raw,readonly=on,file=${qemu}/share/qemu/${t.firmware} \
+            -drive if=pflash,format=raw,file="$state/efivars-pxe-${disk}.fd" \
+            -netdev user,id=net0,tftp=${p.ipxe-test},bootfile=ipxe.efi,hostfwd=tcp::8123-:80 \
+            ${devices} \
+            "$@"
+        '';
       in {
         # Boot the installer directly with -kernel, skipping firmware and the network boot
         vm = app "haos-netinstall-vm" ''
@@ -136,33 +175,20 @@
             "$@"
         '';
 
-        # The real flow: UEFI firmware -> PXE -> iPXE -> haos.ipxe over HTTP -> installer
-        vm-pxe = app "haos-netinstall-vm-pxe" ''
-          set -eu
-          state=${state}
-          mkdir -p "$state"
-          [ -e "$state/nvme.qcow2" ] || ${qemu}/bin/qemu-img create -f qcow2 "$state/nvme.qcow2" 10G
-          # separate firmware settings so boot entries don't mix with vm-disk
-          [ -e "$state/efivars-pxe.fd" ] || cp ${qemu}/share/qemu/${t.vars} "$state/efivars-pxe.fd"
-          chmod u+w "$state/efivars-pxe.fd"
+        # Network boot with VM hardware: virtio network card, NVMe disk
+        vm-pxe = pxeVm "haos-netinstall-vm-pxe" "nvme" ''
+          -device virtio-net-pci,netdev=net0 \
+          -drive file="$state/nvme.qcow2",if=none,id=nvm,format=qcow2 \
+          -device nvme,serial=haos-test,drive=nvm \
+        '';
 
-          # serve the netboot folder on port 8000; reachable from the guest as 10.0.2.2
-          ${pkgs.busybox}/bin/busybox httpd -f -p 8000 -h ${p.netboot} &
-          httpd=$!
-          trap 'kill $httpd' EXIT
-
-          # QEMU's DHCP points the firmware at ipxe.efi, served by its built-in TFTP.
-          # No bootindex: with it, edk2 re-sorts BootOrder to QEMU's order on every boot, undoing
-          # the installer's boot entry. Without it, the saved BootOrder is used, like a real PC.
-          # 2G: the second run boots the installed HAOS, which needs at least 2G
-          ${qemu}/bin/${t.qemu} -m 2G -nographic -no-reboot \
-            -drive if=pflash,format=raw,readonly=on,file=${qemu}/share/qemu/${t.firmware} \
-            -drive if=pflash,format=raw,file="$state/efivars-pxe.fd" \
-            -netdev user,id=net0,tftp=${p.ipxe-test},bootfile=ipxe.efi \
-            -device virtio-net-pci,netdev=net0 \
-            -drive file="$state/nvme.qcow2",if=none,id=nvm,format=qcow2 \
-            -device nvme,serial=haos-test,drive=nvm \
-            "$@"
+        # Network boot with PC hardware: Intel e1000e network card, SATA disk (tests the real drivers).
+        # x86_64 only: the arm64 firmware has no driver to network boot from an e1000e.
+        vm-pxe-pc = pxeVm "haos-netinstall-vm-pxe-pc" "sata" ''
+          -device e1000e,netdev=net0 \
+          -device ahci,id=ahci \
+          -drive file="$state/sata.qcow2",if=none,id=sata,format=qcow2 \
+          -device ide-hd,drive=sata,bus=ahci.0 \
         '';
       };
 
