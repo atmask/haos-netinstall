@@ -65,7 +65,9 @@
          { source = ./installer/haos-netinstall; target = "/usr/bin/haos-netinstall"; }
          { source = ./installer/lib/disks.sh; target = "/usr/lib/haos-netinstall/disks.sh"; }
          { source = pkgs.lib.getExe pkgs.pkgsStatic.curl; target = "/bin/curl"; }
-         { source = pkgs.lib.getExe pkgs.pkgsStatic.jq; target = "/bin/jq"; }
+         # Not pkgsStatic: static jq depends on a static tzdata whose tests fail at build time, and static
+         # packages aren't in the binary cache, so CI builds them. Dynamic works the same as efibootmgr below.
+         { source = pkgs.lib.getExe pkgs.jq; target = "/bin/jq"; }
          # Not pkgsStatic: efivar's build always links a shared libefiboot.so, which fails with static musl.
          # A dynamic binary is fine, makeInitrdNG copies the libraries it needs into the initramfs.
          { source = pkgs.lib.getExe pkgs.efibootmgr; target = "/bin/efibootmgr"; }
