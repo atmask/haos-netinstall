@@ -48,8 +48,9 @@
           "virtio_pci" "virtio_net" "virtio_blk" "virtio_scsi"
           # Disks: NVMe, SATA, USB, SD/eMMC
           "nvme" "ahci" "ata_piix" "sd_mod" "usb_storage" "uas" "mmc_block" "sdhci_pci" "sdhci_acpi"
-          # USB controllers and keyboards (to answer the installer's prompts)
-          "xhci_pci" "ehci_pci" "usbhid" "hid_generic"
+          # Keyboards, to answer the installer's prompts: USB (and its controllers), and on x86 PS/2,
+          # which is also how many laptop keyboards and VM consoles (Proxmox, QEMU) connect
+          "xhci_pci" "ehci_pci" "uhci_hcd" "ohci_pci" "usbhid" "hid_generic" "i8042" "atkbd"
           # Wired network cards: Intel, Realtek, Broadcom, and common USB adapters
           "e1000" "e1000e" "igb" "igc" "r8169" "tg3" "r8152" "cdc_ether" "ax88179_178a"
         ];

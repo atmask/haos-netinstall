@@ -21,8 +21,13 @@ load_drivers() {
   done
 }
 load_drivers
-# udhcpc needs raw packet sockets to send DHCP. No device asks for this one, so load it by name.
-modprobe af_packet 2>/dev/null  # built into the kernel on some targets, which is fine
+# No modalias asks for these, so load them by name (built into the kernel on some targets, which is fine):
+# af_packet: raw packet sockets, which udhcpc needs to send DHCP.
+# i8042, atkbd: the PS/2 keyboard controller and keyboard (x86 only). The controller is found through ACPI,
+# whose modalias doesn't match the driver's, so it isn't loaded above.
+for m in af_packet i8042 atkbd; do
+  modprobe "$m" 2>/dev/null
+done
 
 # UEFI boot entries (Boot0001, BootOrder, ...) show up as files here; only exists on UEFI machines
 if [ -d /sys/firmware/efi ]; then
